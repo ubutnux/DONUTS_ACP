@@ -29,10 +29,14 @@ IMAGES_TO_STABILISE = 10
 SIGMA_BUFFER = 10
 
 # pulseGuide conversions
-PIX2TIME = {'+x': 69.56,
-            '-x': 69.54,
-            '+y': 69.45,
-            '-y': 69.54}
+# Equatorial fork = EQFK
+# German equatorial = GEM
+MOUNT_TYPE = "EQFK"
+PIER_SIDE_KEYWORD = ""
+PIX2TIME = {'+x': 69.33,
+            '-x': 69.26,
+            '+y': 69.23,
+            '-y': 69.34}
 
 # guide directions
 DIRECTIONS = {'-y': 0, '+y': 1, '+x': 2, '-x': 3}
@@ -45,7 +49,10 @@ MAX_ERROR_STABIL_PIXELS = 40
 
 # ACP data base directory
 BASE_DIR = "C:\\Users\\speculoos\\Documents\\ACP Astronomy\\Images"
+DATA_SUBDIR = ""
 AUTOGUIDER_REF_DIR = "C:\\Users\\speculoos\\Documents\\ACP Astronomy\\Images\\autoguider_ref"
+PYTHONPATH = "C:\\ProgramData\\Miniconda3\\python.exe"
+DONUTSPATH = "C:\\Users\\speculoos\\Documents\\GitHub\\DONUTS_ACP"
 
 # PID loop coefficients
 PID_COEFFS = {'x': {'p': 0.70, 'i': 0.02, 'd': 0.0},

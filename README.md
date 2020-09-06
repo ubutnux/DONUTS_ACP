@@ -15,7 +15,7 @@ This package contains a series of scripts and software used for setting up, cali
    1. Operations:
       1. In the ```acp/``` folder there is a modified version of the ACP ```UserActions.wsc``` file. This is used to trigger autoguiding from ACP plans
       1. A daemon script ```donuts_process_handler.py```. This code runs all the time listening for commands from ACP to start and stop the guiding. The commands are triggered by the custom ```UserActions.wsc``` script above
-      1. A shim ```donuts_process.py```, which ```UserActions.wsc``` calls to insert jobs into the daemon using Pyro. The ```donuts_process.py``` script can also be used to manually start and stop guiding if required (e.g. in an emergency or if you wish to run Donues without a daemon)
+      1. A shim ```donuts_process.py```, which ```UserActions.wsc``` calls to insert jobs into the daemon using Pyro. The ```donuts_process.py``` script can also be used to manually start and stop guiding if required (e.g. in an emergency or if you wish to run Donuts without a daemon)
       1. The DONUTS main autoguiding code ```acp_ag.py```. This script does all the shift measuring and telescope movements
       1. A per instrument configuration file, e.g.: ```nites.py```, ```speculoos_io.py``` etc. This file contains information such as field orientation and header keyword maps. A new file like this is required for each new instrument
 
@@ -36,11 +36,11 @@ Follow the steps below to install the prerequisite software required to run Donu
 
    1. Sign into GitHub desktop using your GitHub account.
    1. Clone the DONUTS\_ACP repository -  *https://github.com/jmccormac01/DONUTS_ACP.git*
-   1. Install Visual Studio C++ 2013 redistributable package - *vcredist_x86.exe*
    1. Install mysql - *mysql-installer-web-community-5.7.21.0.msi*
       1. Choose a custom install
-      1. Install the server, utils, shell + workbench only
-      1. It will ask for a username and password, remember these for later
+      1. Install the server and shell only
+      1. It will ask for a root username and password, remember these for later
+      1. Create a normal user as well as root, remember the login details for later
    1. Install miniconda3-latest - *Miniconda3-latest-Windows-x86_64.exe*
    1. Once miniconda is installed, open a prompt and run the commands below:
       1. conda install numpy
@@ -53,8 +53,6 @@ Follow the steps below to install the prerequisite software required to run Donu
 
 ## Setting up MySQL database and autoguiding tables
 
-**NEED TO GENERALISE THE TABLE SCHEMAS**
-
 A MySQL database is used to store information on the autoguiding reference images and the stats from the autoguiding in real time. Set up the database as follows:
 
    1. Open a MySQL terminal
@@ -62,12 +60,13 @@ A MySQL database is used to store information on the autoguiding reference image
    1. Connect to the local database using ```\c localhost```
    1. Enter the username/password used during the installation
    1. Create a new database to hold the autoguiding tables, e.g. ```telescopename_ops```
-   1. Create two tables using the schemas below. The multiline ```CREATE TABLE``` commands can be pasted into the terminal.
+   1. Create three tables using the schemas below. The multiline ```CREATE TABLE``` commands can be pasted into the terminal.
    1. Add the database name, database host, username and password to the instrument configuration file (see below).
 
 ```sql
 CREATE TABLE autoguider_ref (
-  field varchar(100) not null primary key,
+  ref_id mediumint auto_increment primary key,
+  field varchar(100) not null,
   telescope varchar(20) not null,
   ref_image varchar(100) not null,
   filter varchar(20) not null,
@@ -75,18 +74,29 @@ CREATE TABLE autoguider_ref (
   valid_until datetime
 );
 
-CREATE TABLE autoguider_log (
+CREATE TABLE autoguider_log_new (
    updated timestamp default current_timestamp on update current_timestamp,
-   reference varchar(100) not null,
-   comparison varchar(100) not null,
-   solution_x double not null,
-   solution_y double not null,
-   culled_max_shift_x varchar(5) not null,
-   culled_max_shift_y varchar(5) not null,
-   pid_x double not null,
-   pid_y double not null,
+   night date not null,
+   reference varchar(150) not null,
+   comparison varchar(150) not null,
+   stabilised varchar(5) not null,
+   shift_x double not null,
+   shift_y double not null,
+   pre_pid_x double not null,
+   pre_pid_y double not null,
+   post_pid_x double not null,
+   post_pid_y double not null,
    std_buff_x double not null,
-   std_buff_y double not null
+   std_buff_y double not null,
+   culled_max_shift_x varchar(5) not null,
+   culled_max_shift_y varchar(5) not null
+);
+
+CREATE TABLE autoguider_info_log (
+   message_id mediumint not null auto_increment primary key,
+   updated timestamp default current_timestamp on update current_timestamp,
+   telescope varchar(20) not null,
+   message varchar(500) not null
 );
 ```
 
@@ -145,6 +155,8 @@ MAX_ERROR_STABIL_PIXELS = 40
 # ACP data base directory
 BASE_DIR = "C:\\data"
 AUTOGUIDER_REF_DIR = "C:\\data\\autoguider_ref"
+PYTHONPATH = "C:\\ProgramData\\Miniconda3\\python.exe"
+DONUTSPATH = "C:\\Users\\nites\\Documents\\GitHub\\DONUTS_ACP"
 
 # PID loop coefficients
 PID_COEFFS = {'x': {'p': 1.0, 'i': 0.5, 'd': 0.0},
@@ -168,13 +180,26 @@ ELEV = 2326.
 SUNALT_LIMIT = 0
 ```
 
-## Setting up daemon mode
+# Setting up daemon mode
+
+## Registering custom user actions script with ACP
 
 Running Donuts as a daemon requires connecting the Python code to ACP. This is done using a custom ```UserActions``` script.
+The ```UserActions<INSTRUMENT_NAME>.wsc``` script allows ACP to call our custom python code. On 64bit operating systems it
+needs registering as follows:
+
+   1. Run C:\Windows\SysWOW64\cmd.exe   **(Note:SysWOW64!)**
+   1. cd "\Program Files\ACP Obs Control"
+   1. ...> regsvr32 UserActions<INSTRUMENT_NAME>.wsc
+
+
+## Running daemon mode
+
 The custom ```UserActions``` script sets up a new ```TAG``` command.
 When ACP sees the request for Donuts via the custom ```TAG``` it triggers the Donuts daemon to spawn an autoguiding process.
-ACP automatically ends any active autoguiding processes at the end of an observing block.
-Below is an example extract from an ACP plan where Donuts is enabled for the first object and off for the second
+The new ```UserActions``` script also allows ACP to automatically stop autoguiding processes at the end of an observing block.
+Below is an example extract from an ACP plan where Donuts is enabled for the first object and is disabled for the second.
+Ommitting the call to enable Donuts ACP has the same effect as using ```TAG Donuts=off```. **Note: the TAG command is case sensitive**.
 
 ```sh
 # TAG Donuts=on
@@ -185,9 +210,9 @@ Target2<tab>14:00:00<tab>+10:00:00
 
 A ```UsersActions``` script is required for each installation of this package. Please contact me and I can prepare one for your project
 
-## A note on reference images
+# A note on reference images
 
-Reference images are critical to the successful operation of Donuts. The goal of the reference image is to provide long-term super-stable tracking performance. If the anything on the telescope changes, such as the camera is removed and reinstalled, the previous reference images become invalid and need disabling.
+Reference images are critical to the successful operation of Donuts. The goal of the reference image is to provide long-term stable tracking performance. If the anything on the telescope changes, such as the camera is removed and reinstalled, the previous reference images become invalid and need disabling.
 
 The ```stopcurrentrefimage.py``` script can be used to disable the reference image of a given field. Donuts will then spot there is no valid reference image and aquire a new one during the next night.
 
@@ -196,25 +221,25 @@ The ```stopcurrentrefimage.py``` script can be used to disable the reference ima
 
 ## Calibrating camera scale and orientation
 
-The ```pulseGuiding``` command must be calibrate before Donuts can convert pixel offsets to on-sky movments.
+The ```pulseGuiding``` command must be calibrated before Donuts can convert pixel offsets to on-sky movments.
 The ```calibrate_pulse_guide.py``` script automatically determines the scale and orientation of the camera. To calibrate pulseguide:
 
    1. Manually point the telescope to LST+1h in RA and 0deg in Dec and make the telescope track this position.
-   1. In an Anaconda terminal go to the ```DONUTS_ACP folder``` and run the command:
+   1. In an Anaconda terminal go to the ```DONUTS_ACP``` folder and run the command:
       1. *python calibrate_pulse_guide.py TELESCOPE_NAME --analyse*
-      1. This will take a series of images nudging the telescope up/down/left/right and measuring the offsets.
+      1. This will take a series of images while nudging the telescope up/down/left/right in between and measuring the offsets.
       1. The pattern is repeated 10 times and the results are returned at the end.
-   1. Add the scales and directions from ```calibrate_pulse_guide.py``` to the instrument configuration file under the parameters ```PIX2TIME``` and ```DIRECTIONS```.
+   1. The resulting scales and directions from ```calibrate_pulse_guide.py``` should be added the instrument configuration file under the parameters ```PIX2TIME``` and ```DIRECTIONS```. Example values can be seen in the config file above.
 
-If a camera is removed, rotated or the telescope is modified in any way requiring a new pointing model, then the ```pulseGuide``` command should be recalibrated using the steps above
+If a camera is removed, rotated or the telescope is modified in any way requiring a new pointing model, then the ```pulseGuide``` command should be recalibrated using the steps above.
 
 ## Calibrating autoguiding control loop
 
-Insert notes on PID loop calibration
+Tuning PID loops is an art in itself. Documenting that here is beyond the scope of this readme. I am happy to tune telescopes on a case by case basis.
 
 # Operation of Donuts
 
-Insert the notes from SPECULOOS here
+Donuts can be operated using the daemon mode described above or triggered manually from the command line by the observer. Operational instructions can be written on a case by case basis.
 
 ## Schematic
 

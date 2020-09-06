@@ -14,7 +14,7 @@ FIELD_KEYWORD = 'OBJECT'
 RA_AXIS = 'x'
 
 # imager position angle
-CAMERA_ANGLE = 1.2
+CAMERA_ANGLE = 0.0
 
 # guider log file name
 LOGFILE = "guider.log"
@@ -29,13 +29,17 @@ IMAGES_TO_STABILISE = 10
 SIGMA_BUFFER = 10
 
 # pulseGuide conversions
-PIX2TIME = {'+x': 69.56,
-            '-x': 69.54,
-            '+y': 69.45,
-            '-y': 69.54}
+# Equatorial fork = EQFK
+# German equatorial = GEM
+MOUNT_TYPE = "EQFK"
+PIER_SIDE_KEYWORD = ""
+PIX2TIME = {'+x': 69.43,
+            '-x': 69.44,
+            '+y': 69.41,
+            '-y': 69.22}
 
 # guide directions
-DIRECTIONS = {'-y': 0, '+y': 1, '+x': 2, '-x': 3}
+DIRECTIONS = {'+y': 0, '-y': 1, '+x': 2, '-x': 3}
 
 # max allowed shift to correct
 MAX_ERROR_PIXELS = 20
@@ -44,8 +48,11 @@ MAX_ERROR_PIXELS = 20
 MAX_ERROR_STABIL_PIXELS = 40
 
 # ACP data base directory
-BASE_DIR = "C:\\Users\\Space\\My Documents\\ACP Astronomy\\Images"
-AUTOGUIDER_REF_DIR = "C:\\Users\\Space\\My Documents\\ACP Astronomy\\Images\\autoguider_ref"
+BASE_DIR = "C:\\Users\\Space\\Documents\\ACP Astronomy\\Images"
+DATA_SUBDIR = "Raw"
+AUTOGUIDER_REF_DIR = "C:\\Users\\Space\\Documents\\ACP Astronomy\\Images\\autoguider_ref"
+PYTHONPATH = "C:\\Users\\Space\\Miniconda3\\python.exe"
+DONUTSPATH = "C:\\Users\\Space\\Documents\\GitHub\\DONUTS_ACP"
 
 # PID loop coefficients
 PID_COEFFS = {'x': {'p': 0.70, 'i': 0.02, 'd': 0.0},
@@ -55,14 +62,14 @@ PID_COEFFS = {'x': {'p': 0.70, 'i': 0.02, 'd': 0.0},
 
 # database set up
 DB_HOST = "localhost"
-DB_USER = "space"
-DB_DATABASE = "saintex_ops"
-DB_PASS = 'saintex_ops'
+DB_USER = "Space"
+DB_DATABASE = "saint_ops"
+DB_PASS = 'saint_ops'
 
 # observatory location for sun calculations
-OLAT = -24.-(37./60.)-(38./3600.)
-OLON = -70.-(24./60.)-(15./3600.)
-ELEV = 2418.
+OLAT = 31.0439
+OLON = -115.4637
+ELEV = 2800.
 
 # set the limit where donuts will shut off automatically
 SUNALT_LIMIT = 0

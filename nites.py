@@ -29,6 +29,10 @@ IMAGES_TO_STABILISE = 10
 SIGMA_BUFFER = 5
 
 # pulseGuide conversions
+# Equatorial fork = EQFK
+# German equatorial = GEM
+MOUNT_TYPE = "EQFK"
+PIER_SIDE_KEYWORD = ""
 PIX2TIME = {'+x': 100.00,
             '-x': 100.00,
             '+y': 100.00,
@@ -45,7 +49,10 @@ MAX_ERROR_STABIL_PIXELS = 40
 
 # ACP data base directory
 BASE_DIR = "C:\\data"
+DATA_SUBDIR = ""
 AUTOGUIDER_REF_DIR = "C:\\data\\autoguider_ref"
+PYTHONPATH = "C:\\ProgramData\\Miniconda3\\python.exe"
+DONUTSPATH = "C:\\Users\\nites\\Documents\\GitHub\\DONUTS_ACP"
 
 # PID loop coefficients
 PID_COEFFS = {'x': {'p': 1.0, 'i': 0.5, 'd': 0.0},

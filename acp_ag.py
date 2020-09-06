@@ -5,7 +5,7 @@ Usage:
     $> python acp_ag.py INSTRUMENT
 
 where INSTRUMENT can be:
-    nites, io, europa, callisto, ganymede
+    nites, io, europa, callisto, ganymede, saintex, artemis
 """
 import time
 import os
@@ -41,6 +41,8 @@ from donuts import Donuts
 # pylint: disable = redefined-outer-name
 # pylint: disable = line-too-long
 # pylint: disable = no-member
+# pylint: disable = wildcard-import
+# pylint: disable = unused-wildcard-import
 
 # autoguider status flags
 ag_new_day, ag_new_start, ag_new_field, ag_new_filter, ag_no_change = range(5)
@@ -66,7 +68,8 @@ def argParse():
     p.add_argument('instrument',
                    help='select an instrument',
                    choices=['io', 'callisto', 'europa',
-                            'ganymede', 'nites'])
+                            'ganymede', 'saintex', 'nites',
+                            'artemis', 'rcos20'])
     return p.parse_args()
 
 def getSunAlt(observatory):
@@ -113,7 +116,7 @@ def strtime(dt):
     return dt.strftime('%Y-%m-%d %H:%M:%S')
 
 # apply guide corrections
-def guide(x, y, images_to_stabilise):
+def guide(x, y, images_to_stabilise, gem=False):
     """
     Generic autoguiding command with built-in PID control loop
     guide() will track recent autoguider corrections and ignore
@@ -136,6 +139,13 @@ def guide(x, y, images_to_stabilise):
         If -ve, field has stabilised
         If +ve allow for bigger shifts and do not append
         ag values to buffers
+    gem : boolean
+        Are we using a German Equatorial Mount?
+        Default = False
+        If so, the side of the pier matters for correction
+        directions. Ping the mount for pierside before applying
+        a correction. If this turns out to be slow, we can do so
+        only when in the HA range for a pier flip
 
     Returns
     -------
@@ -154,6 +164,8 @@ def guide(x, y, images_to_stabilise):
     ------
     None
     """
+
+
     connected = myScope.Connected
     if str(connected) == 'True':
         # get telescope declination to scale RA corrections
@@ -400,6 +412,14 @@ def getAmOrPm():
     """
     Determine if it is morning or afteroon
 
+    This function uses now instead of utcnow because
+    it is the local time which determines if we are
+    starting or ending the curent night.
+
+    A local time > midday is the evening
+    A local time < midday is the morning of the day after
+    This is not true for UTC in all places
+
     Parameters
     ----------
     None
@@ -414,7 +434,7 @@ def getAmOrPm():
     ------
     None
     """
-    now = datetime.utcnow()
+    now = datetime.now()
     if now.hour >= 12:
         token = 0
     else:
@@ -422,7 +442,7 @@ def getAmOrPm():
     return token
 
 # get tonights directory
-def getDataDir():
+def getDataDir(data_subdir):
     """
     Get tonight's data directory
 
@@ -444,13 +464,17 @@ def getDataDir():
     night = "{:d}{:02d}{:02d}".format(d.year, d.month, d.day)
     night_str = "{:d}-{:02d}-{:02d}".format(d.year, d.month, d.day)
     data_loc = "{}\\{}".format(BASE_DIR, night)
+    # adds capability for data to live in folders
+    # inside the nightly folder, as for saintex
+    if data_subdir != "":
+        data_loc = data_loc + "\\{}".format(data_subdir)
     if os.path.exists(data_loc):
         return data_loc, night_str
     else:
         return None, night_str
 
 # wait for the newest image
-def waitForImage(current_field, n_images, current_filter,
+def waitForImage(data_subdir, current_field, n_images, current_filter,
                  current_data_dir, observatory):
     """
     Wait for new images. Several things can happen:
@@ -462,6 +486,8 @@ def waitForImage(current_field, n_images, current_filter,
 
     Parameters
     ----------
+    data_subdir : string
+        subdirectory of data folder for raw data
     current_field : string
         name of the current target
     n_images : int
@@ -490,7 +516,7 @@ def waitForImage(current_field, n_images, current_filter,
     """
     while 1:
         # check for new data directory, i.e. tomorrow
-        new_data_dir, _ = getDataDir()
+        new_data_dir, _ = getDataDir(data_subdir)
         if new_data_dir != current_data_dir:
             return ag_new_day, None, None, None
         # secondary check, check the sun altitude, quit if > 0
@@ -680,12 +706,11 @@ def setReferenceImage(field, filt, ref_image, telescope):
     #os.system('cp {} {}'.format(ref_image, AUTOGUIDER_REF_DIR))
     copyfile(ref_image, "{}/{}".format(AUTOGUIDER_REF_DIR, ref_image))
 
-def stopAg():
+def stopAg(pypath, donutspath):
     """
     Call the donuts_process_handler to stop this guiding job
     """
-    cmd = "C:\\ProgramData\\Miniconda3\\python.exe " \
-          "C:\\Users\\speculoos\\Documents\\GitHub\\DONUTS_ACP\\donuts_process.py stop"
+    cmd = "{} {}\\donuts_process.py stop".format(pypath, donutspath)
     os.system(cmd)
 
 if __name__ == "__main__":
@@ -701,6 +726,12 @@ if __name__ == "__main__":
         from speculoos_europa import *
     elif args.instrument == 'ganymede':
         from speculoos_ganymede import *
+    elif args.instrument == 'saintex':
+        from saintex import *
+    elif args.instrument == 'artemis':
+        from speculoos_artemis import *
+    elif args.instrument == 'rcos20':
+        from rcos20 import *
     else:
         sys.exit(1)
 
@@ -726,7 +757,7 @@ if __name__ == "__main__":
         sleep_time = 10
         # loop while waiting on data directory & scope to be connected
         while not data_loc:
-            data_loc, night = getDataDir()
+            data_loc, night = getDataDir(DATA_SUBDIR)
             if data_loc:
                 logMessageToDb(args.instrument,
                                "Found data directory: {}".format(data_loc))
@@ -758,11 +789,12 @@ if __name__ == "__main__":
         # if no images appear before the end of the night
         # just die quietly
         if n_images == 0:
-            ag_status, last_file, _, _ = waitForImage("", n_images, "", data_loc, observatory)
+            ag_status, last_file, _, _ = waitForImage(DATA_SUBDIR, "", n_images,
+                                                      "", data_loc, observatory)
             if ag_status == ag_new_day:
                 logMessageToDb(args.instrument,
                                "New day detected, ending process...")
-                stopAg()
+                stopAg(PYTHONPATH, DONUTSPATH)
         else:
             last_file = max(templist, key=os.path.getctime)
 
@@ -796,7 +828,8 @@ if __name__ == "__main__":
 
         # Now wait on new images
         while 1:
-            ag_status, check_file, current_field, current_filter = waitForImage(current_field,
+            ag_status, check_file, current_field, current_filter = waitForImage(DATA_SUBDIR,
+                                                                                current_field,
                                                                                 n_images,
                                                                                 current_filter,
                                                                                 data_loc,
@@ -804,7 +837,7 @@ if __name__ == "__main__":
             if ag_status == ag_new_day:
                 logMessageToDb(args.instrument,
                                "New day detected, ending process...")
-                stopAg()
+                stopAg(PYTHONPATH, DONUTSPATH)
             elif ag_status == ag_new_field or ag_status == ag_new_filter:
                 logMessageToDb(args.instrument,
                                "New field/filter detected, looking for previous reference image...")
@@ -909,7 +942,7 @@ if __name__ == "__main__":
                 if not applied:
                     logMessageToDb(args.instrument,
                                    'SHIFT NOT APPLIED, TELESCOPE *NOT* CONNECTED, EXITING')
-                    stopAg()
+                    stopAg(PYTHONPATH, DONUTSPATH)
             log_list = [night,
                         os.path.split(ref_file)[1],
                         check_file,
